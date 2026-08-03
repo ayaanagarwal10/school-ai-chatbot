@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Singhania AI</title>
+</head>
+
+<body>
+
+<h1>🤖 Singhania AI</h1>
+
+<input
+id="message"
+type="text"
+placeholder="Ask anything...">
+
+<button onclick="sendMessage()">
+Send
+</button>
+
+<p id="reply"></p>
+
+<script>
+
+async function sendMessage(){
+
+const message=document.getElementById("message").value;
+
+const response=await fetch("/chat",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+message:message
+})
+
+});
+
+const data=await response.json();
+
+document.getElementById("reply").innerText=data.response;
+
+}
+
+</script>
+
+</body>
+
+</html>
