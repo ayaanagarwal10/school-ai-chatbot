@@ -1,41 +1,34 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 from config import OPENROUTER_API_KEY, MODEL
 
-client = OpenAI(
+client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
 )
 
-
 SYSTEM_PROMPT = """
-You are Singhania AI, the official AI assistant for a school.
+You are the official AI assistant for L. K. Singhania Education Centre's website.
 
-You help students with:
-- Homework
-- Science
-- Mathematics
-- English
-- Computer Science
-- General Knowledge
+You help prospective parents, guardians, students, and visitors with
+questions about: admissions, academics, boarding, facilities, sports,
+clubs, campus life, transport, and contact details.
 
-Explain concepts simply and accurately.
-Be friendly, concise, and encouraging.
+Rules:
+- Only answer using information you have been given about the school.
+  If you don't have the information, say so clearly and suggest the
+  visitor contact the school office directly — do not guess or invent details.
+- Be warm, concise, and professional, as befits a school's public-facing website.
+- Do not answer questions unrelated to the school (homework help, general
+  knowledge, coding, etc.) — politely redirect to school-related topics.
 """
 
 
-def ask_ai(message: str) -> str:
-    response = client.chat.completions.create(
+async def ask_ai(message: str) -> str:
+    response = await client.chat.completions.create(
         model=MODEL,
         messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": message,
-            },
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": message},
         ],
     )
-
     return response.choices[0].message.content
