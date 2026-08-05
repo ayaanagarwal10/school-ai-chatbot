@@ -1,5 +1,28 @@
-.venv/
+# Environment variables (API keys — never commit this)
 .env
+
+# Python
 __pycache__/
-.vscode/
 *.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+
+# Virtual environment
+.venv/
+
+# macOS
+.DS_Store
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+
+# Generated RAG artifacts — regenerate locally with `python ingest.py`
+data/knowledge_base.json
+data/embeddings.npy
+
+# Logs
+*.log
