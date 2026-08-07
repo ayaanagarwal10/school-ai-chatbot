@@ -1,5 +1,6 @@
 """
-Builds the chatbot's knowledge base from the school website and PDF documents.
+Builds the chatbot's knowledge base from the school website, PDF documents,
+and hand-written text/markdown files in data/raw/.
 Run this whenever source content changes: python ingest.py
 """
 
@@ -15,15 +16,27 @@ from sentence_transformers import SentenceTransformer
 
 DATA_DIR = Path("data")
 RAW_DIR = DATA_DIR / "raw"
+
 PDF_PATHS = [RAW_DIR / "school_diary.pdf"]
 
-# Add every school website page you want the bot to know about.
+TEXT_PATHS = list(RAW_DIR.glob("*.txt")) + list(RAW_DIR.glob("*.md"))
+
 WEBSITE_URLS = [
     "https://www.lksec.org/",
-    # "https://www.lksec.org/admissions",
-    # "https://www.lksec.org/academics",
-    # "https://www.lksec.org/facilities",
-    # add the rest of the relevant subpages here
+    "https://www.lksec.org/about-lks",
+    "https://www.lksec.org/vision-mission",
+    "https://www.lksec.org/awards.php",
+    "https://www.lksec.org/affiliation-and-accreditations",
+    "https://www.lksec.org/location",
+    "https://www.lksec.org/lksec-story",
+    "https://www.lksec.org/milestones",
+    "https://www.lksec.org/board-of-governors",
+    "https://www.lksec.org/administration",
+    "https://www.lksec.org/admission-criteria",
+    "https://www.lksec.org/fee-structure",
+    "https://www.lksec.org/infrastructure",
+    "https://www.lksec.org/teaching-faculty.php",
+
 ]
 
 CHUNK_SIZE = 800
@@ -71,6 +84,7 @@ def chunk_text(text: str, source: str, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVER
 def build_knowledge_base():
     all_chunks = []
 
+    # PDFs
     for pdf_path in PDF_PATHS:
         if not pdf_path.exists():
             print(f"Skipping missing PDF: {pdf_path}")
@@ -79,6 +93,13 @@ def build_knowledge_base():
         text = extract_pdf_text(pdf_path)
         all_chunks.extend(chunk_text(text, source=pdf_path.name))
 
+    # Hand-written text/markdown files (for content pypdf can't extract correctly)
+    for text_path in TEXT_PATHS:
+        print(f"Reading {text_path.name}...")
+        text = text_path.read_text(encoding="utf-8")
+        all_chunks.extend(chunk_text(text, source=text_path.name))
+
+    # Website pages
     for url in WEBSITE_URLS:
         print(f"Fetching {url}...")
         try:

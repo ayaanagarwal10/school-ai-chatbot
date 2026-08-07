@@ -10,7 +10,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -24,6 +23,7 @@ async def home(request: Request):
 async def chat(request: Request):
     data = await request.json()
     user_message = data.get("message", "").strip()
+    history = data.get("history", [])
 
     if not user_message:
         return JSONResponse({"response": "Please enter a message."}, status_code=400)
@@ -34,8 +34,21 @@ async def chat(request: Request):
             status_code=400,
         )
 
+    # Validate history shape so malformed input can't crash ai.py
+    if not isinstance(history, list):
+        history = []
+    history = [
+        m for m in history
+        if isinstance(m, dict)
+        and m.get("role") in ("user", "assistant")
+        and isinstance(m.get("content"), str)
+    ]
+
+    # Keep last 10 turns (5 exchanges) to avoid token bloat
+    history = history[-10:]
+
     try:
-        reply = await ask_ai(user_message)
+        reply = await ask_ai(user_message, history)
         return JSONResponse({"response": reply})
     except Exception:
         logger.exception("ask_ai failed")

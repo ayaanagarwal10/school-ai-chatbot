@@ -24,6 +24,8 @@ Rules:
   visitor contact the school office directly — do not guess or invent details.
 - Be warm, concise, and professional.
 - Do not answer questions unrelated to the school.
+- You have access to conversation history — use it to understand follow-up
+  questions and give coherent, contextual answers.
 """
 
 
@@ -31,18 +33,22 @@ def _build_context(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(c["text"] for c in chunks)
 
 
-async def ask_ai(message: str) -> str:
-    # retrieve() is CPU-bound (embedding + numpy search), so it's run in a
-    # thread to avoid blocking the event loop, same reasoning as before.
-    relevant_chunks = await asyncio.to_thread(retrieve, message, 3)
+async def ask_ai(message: str, history: list[dict] = []) -> str:
+    relevant_chunks = await asyncio.to_thread(retrieve, message, 5)
     context = _build_context(relevant_chunks)
+
+    # Inject context into the latest user message only — not into history,
+    # since historical turns already got their own context when they were sent.
     user_prompt = f"CONTEXT:\n{context}\n\nQUESTION:\n{message}"
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *history,
+        {"role": "user", "content": user_prompt},
+    ]
 
     response = await client.chat.completions.create(
         model=MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
+        messages=messages,
     )
     return response.choices[0].message.content
