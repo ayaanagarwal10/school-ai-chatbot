@@ -1,54 +1,117 @@
 import asyncio
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from config import OPENROUTER_API_KEY, MODEL
 from retrieval import retrieve
+
 
 client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=OPENROUTER_API_KEY,
+    timeout=20.0,
+    max_retries=0,
 )
 
+
 SYSTEM_PROMPT = """
-You are the official AI assistant for L K Singhania Education Centre's website.
+You are the official AI assistant for L K Singhania Education Centre.
 
-You help prospective parents, guardians, students, and visitors with
-questions about admissions, academics, boarding, facilities, sports, clubs,
-campus life, transport, and contact details.
+Answer questions about:
+- Admissions
+- Academics
+- Boarding
+- Facilities
+- Sports
+- Clubs
+- Campus life
+- Transport
+- Contact information
 
-You will be given CONTEXT retrieved from the school's official website and
-documents. Answer using only that context.
+Use ONLY the provided school context.
 
 Rules:
-- If the context does not contain the answer, say so clearly and suggest the
-  visitor contact the school office directly — do not guess or invent details.
-- Be warm, concise, and professional.
-- Do not answer questions unrelated to the school.
-- You have access to conversation history — use it to understand follow-up
-  questions and give coherent, contextual answers.
+- Never invent information.
+- If the context does not contain the answer, say you don't have
+  that information and recommend contacting the school office.
+- Keep answers concise, but include all important details from the context.
+- Never stop in the middle of a sentence.
+- Be friendly and professional.
+- Avoid repeating the same information.
+- Prefer short paragraphs or bullet points.
+- If a user asks something unrelated to the school, politely say
+  you can only help with school-related questions.
 """
 
 
-def _build_context(chunks: list[dict]) -> str:
-    return "\n\n---\n\n".join(c["text"] for c in chunks)
+def _build_context(chunks):
+    return "\n\n---\n\n".join(
+        c["text"]
+        for c in chunks
+        if isinstance(c, dict) and c.get("text")
+    )
 
 
-async def ask_ai(message: str, history: list[dict] = []) -> str:
-    relevant_chunks = await asyncio.to_thread(retrieve, message, 5)
+async def ask_ai(message: str, history=None) -> str:
+
+    if history is None:
+        history = []
+
+    # Retrieve the 3 most relevant school information chunks
+    relevant_chunks = await asyncio.to_thread(
+        retrieve,
+        message,
+        3
+    )
+
     context = _build_context(relevant_chunks)
 
-    # Inject context into the latest user message only — not into history,
-    # since historical turns already got their own context when they were sent.
-    user_prompt = f"CONTEXT:\n{context}\n\nQUESTION:\n{message}"
+    user_prompt = f"""SCHOOL CONTEXT:
+{context}
+
+QUESTION:
+{message}
+"""
+
+    # Keep only recent conversation history
+    recent_history = history[-6:]
 
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *history,
-        {"role": "user", "content": user_prompt},
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        },
+        *recent_history,
+        {
+            "role": "user",
+            "content": user_prompt
+        },
     ]
 
-    response = await client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-    )
-    return response.choices[0].message.content
+    try:
+
+        response = await client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            max_tokens=450,
+            temperature=0.2,
+        )
+
+        content = response.choices[0].message.content
+
+        if content:
+            return content.strip()
+
+        print("WARNING: OpenRouter returned empty content:")
+        print(response)
+
+        return (
+            "I couldn't generate an answer right now. "
+            "Please try asking the question again."
+        )
+
+    except RateLimitError:
+
+        return (
+            "I'm receiving too many requests right now. "
+            "Please wait a moment and try again."
+        )

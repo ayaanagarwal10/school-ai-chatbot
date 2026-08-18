@@ -1,18 +1,27 @@
+import asyncio
 import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ai import ask_ai
+from retrieval import preload
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def startup():
+    await asyncio.to_thread(preload)
+
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
