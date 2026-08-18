@@ -52,16 +52,20 @@ def _build_context(chunks):
 
 
 async def ask_ai(message: str, history=None) -> str:
-
     if history is None:
         history = []
 
-    # Retrieve the 3 most relevant school information chunks
     relevant_chunks = await asyncio.to_thread(
         retrieve,
         message,
-        3
+        3,
     )
+
+    if not relevant_chunks:
+        return (
+            "I couldn't find that information in the school's available "
+            "resources. Please contact the school office for accurate information."
+        )
 
     context = _build_context(relevant_chunks)
 
@@ -72,23 +76,15 @@ QUESTION:
 {message}
 """
 
-    # Keep only recent conversation history
     recent_history = history[-6:]
 
     messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        },
+        {"role": "system", "content": SYSTEM_PROMPT},
         *recent_history,
-        {
-            "role": "user",
-            "content": user_prompt
-        },
+        {"role": "user", "content": user_prompt},
     ]
 
     try:
-
         response = await client.chat.completions.create(
             model=MODEL,
             messages=messages,
@@ -110,7 +106,6 @@ QUESTION:
         )
 
     except RateLimitError:
-
         return (
             "I'm receiving too many requests right now. "
             "Please wait a moment and try again."
