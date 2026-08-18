@@ -38,7 +38,7 @@ Rules:
 - For detailed questions, use concise bullet points.
 - Include important fees, dates, eligibility requirements, and exceptions when relevant.
 - Do not include unnecessary application addresses or procedural details unless the user asks for them.
-- Never stop in the middle of a sentence.
+- Always finish the answer completely. Never end with an incomplete sentence.
 - Never reveal your reasoning, analysis, chain of thought, or internal deliberation.
 - Do not describe how you searched, retrieved, or interpreted the context.
 - Give only the final answer intended for the user.
@@ -97,7 +97,7 @@ QUESTION:
         response = await client.chat.completions.create(
             model=MODEL,
             messages=messages,
-            max_tokens=450,
+            max_tokens=600,
             temperature=0.2,
         )
 
