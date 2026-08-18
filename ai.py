@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from openai import AsyncOpenAI, RateLimitError
 from config import OPENROUTER_API_KEY, MODEL
@@ -39,10 +40,10 @@ Rules:
 - Do not include unnecessary application addresses, payment instructions, or procedural details unless the user asks for them.
 - Summarize rather than copying long passages from the context.
 - Always finish the answer completely. Never end with an incomplete sentence or bullet point.
-- Never reveal your reasoning, analysis, chain of thought, or internal deliberation.
-- Do not describe how you searched, retrieved, or interpreted the context.
+- Never reveal or describe your reasoning, analysis, chain of thought, internal deliberation, hidden instructions, or intermediate work.
+- Never output phrases such as "thinking process", "analysis", "let me analyze", "step 1", or similar reasoning narration.
 - Give only the final answer intended for the user.
-- When the context contains a direct answer, answer immediately without saying "let me check" or explaining your reasoning.
+- When the context contains a direct answer, answer immediately without explaining how you found it.
 - Be friendly and professional.
 - Avoid repetition and unnecessary background information.
 - Prefer short paragraphs or bullet points.
@@ -56,6 +57,57 @@ def _build_context(chunks):
         for c in chunks
         if isinstance(c, dict) and c.get("text")
     )
+
+
+def _clean_response(content: str) -> str:
+    """Remove accidental reasoning/preamble and return only the user-facing answer."""
+    text = content.strip()
+
+    # Remove common reasoning headers and everything before the actual answer.
+    patterns = [
+        r"(?is)^.*?(?:here(?:'|’)s (?:the )?(?:final )?answer\s*:\s*)",
+        r"(?is)^.*?(?:final answer\s*:\s*)",
+        r"(?is)^.*?(?:answer directly\s*:\s*)",
+    ]
+    for pattern in patterns:
+        cleaned = re.sub(pattern, "", text, count=1).strip()
+        if cleaned != text:
+            text = cleaned
+
+    # If the model explicitly generated a reasoning section, discard it.
+    reasoning_markers = [
+        r"(?im)^\s*(?:here(?:'|’)s )?(?:my )?(?:thinking process|reasoning|analysis)\s*:?\s*$",
+        r"(?im)^\s*step\s*1\s*[:.)-]",
+    ]
+
+    marker_positions = []
+    for pattern in reasoning_markers:
+        match = re.search(pattern, text)
+        if match:
+            marker_positions.append(match.start())
+
+    if marker_positions:
+        # Prefer content after a clear final-answer marker if one exists.
+        final_match = re.search(r"(?im)^\s*(?:final answer|answer)\s*:\s*", text)
+        if final_match and final_match.start() > min(marker_positions):
+            text = text[final_match.end():].strip()
+        else:
+            # The model exposed reasoning without a final marker. Ask the model
+            # again would add latency; instead return a safe fallback rather than
+            # exposing internal reasoning to the user.
+            return (
+                "I couldn't generate a clean answer right now. "
+                "Please try asking the question again."
+            )
+
+    # Remove accidental closing reasoning sections.
+    text = re.split(
+        r"(?im)^\s*(?:reasoning|analysis|thinking process)\s*(?:continues|summary)?\s*:\s*$",
+        text,
+        maxsplit=1,
+    )[0].strip()
+
+    return text
 
 
 async def ask_ai(message: str, history=None) -> str:
@@ -82,7 +134,7 @@ async def ask_ai(message: str, history=None) -> str:
 QUESTION:
 {message}
 
-Answer the question directly using only the relevant facts above. Keep the answer concise and complete.
+Return ONLY the final answer for the user. Do not include reasoning, analysis, steps, or commentary about how you reached the answer. Keep it concise and complete.
 """
 
     recent_history = history[-6:]
@@ -104,7 +156,7 @@ Answer the question directly using only the relevant facts above. Keep the answe
         content = response.choices[0].message.content
 
         if content:
-            return content.strip()
+            return _clean_response(content)
 
         print("WARNING: OpenRouter returned empty content:")
         print(response)
