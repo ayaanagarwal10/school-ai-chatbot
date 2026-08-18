@@ -61,6 +61,8 @@ def preload():
 def retrieve(query: str, top_k: int = 3, min_score: float = 0.25) -> list[dict]:
     _load()
 
+    query_lower = query.lower()
+
     query_embedding = _model.encode(
         query,
         normalize_embeddings=True,
@@ -68,6 +70,43 @@ def retrieve(query: str, top_k: int = 3, min_score: float = 0.25) -> list[dict]:
     )
 
     scores = _embeddings @ query_embedding
+
+    # Prioritize official school contact information for contact-related queries.
+    contact_query = any(
+        word in query_lower
+        for word in (
+            "contact",
+            "phone",
+            "telephone",
+            "mobile",
+            "number",
+            "email",
+            "e-mail",
+            "office",
+            "reception",
+            "principal",
+        )
+    )
+
+    if contact_query:
+        for i, chunk in enumerate(_chunks):
+            text = chunk.get("text", "").lower()
+
+            # Official school contact section should rank above other phone lists.
+            if (
+                "contact numbers" in text
+                or "reception" in text
+                or "principal office" in text
+                or "admission & fee information" in text
+            ):
+                scores[i] += 0.25
+
+            # Avoid exposing hostel/house-in-charge numbers for general contact queries.
+            if (
+                "house in-charge" in text
+                or "hostel name of house" in text
+            ):
+                scores[i] -= 0.20
 
     top_indices = np.argsort(scores)[::-1]
 
