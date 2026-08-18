@@ -58,7 +58,7 @@ def preload():
     _load()
 
 
-def retrieve(query: str, top_k: int = 3) -> list[dict]:
+def retrieve(query: str, top_k: int = 3, min_score: float = 0.25) -> list[dict]:
     _load()
 
     query_embedding = _model.encode(
@@ -69,19 +69,21 @@ def retrieve(query: str, top_k: int = 3) -> list[dict]:
 
     scores = _embeddings @ query_embedding
 
-    top_indices = np.argpartition(
-        scores,
-        -top_k
-    )[-top_k:]
+    top_indices = np.argsort(scores)[::-1]
 
-    top_indices = top_indices[
-        np.argsort(scores[top_indices])[::-1]
-    ]
+    results = []
+    for i in top_indices:
+        score = float(scores[i])
 
-    return [
-        {
+        if score < min_score:
+            break
+
+        results.append({
             **_chunks[i],
-            "score": float(scores[i])
-        }
-        for i in top_indices
-    ]
+            "score": score
+        })
+
+        if len(results) >= top_k:
+            break
+
+    return results
