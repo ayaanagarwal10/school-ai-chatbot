@@ -71,7 +71,35 @@ def retrieve(query: str, top_k: int = 3, min_score: float = 0.25) -> list[dict]:
 
     scores = _embeddings @ query_embedding
 
-    # Prioritize official school contact information for contact-related queries.
+    # Prioritize current official website information for topics where
+    # older school-diary information may contain outdated values.
+    admission_query = any(
+        word in query_lower
+        for word in (
+            "admission",
+            "admissions",
+            "registration",
+            "eligible class",
+            "eligibility",
+            "application",
+            "class xi",
+            "class 11",
+        )
+    )
+
+    fee_query = any(
+        word in query_lower
+        for word in (
+            "fee",
+            "fees",
+            "fee structure",
+            "cost",
+            "tuition",
+            "boarding fee",
+            "registration fee",
+        )
+    )
+
     contact_query = any(
         word in query_lower
         for word in (
@@ -88,11 +116,26 @@ def retrieve(query: str, top_k: int = 3, min_score: float = 0.25) -> list[dict]:
         )
     )
 
-    if contact_query:
-        for i, chunk in enumerate(_chunks):
-            text = chunk.get("text", "").lower()
+    for i, chunk in enumerate(_chunks):
+        text = chunk.get("text", "").lower()
+        source = str(chunk.get("source", "")).lower()
 
-            # Official school contact section should rank above other phone lists.
+        # Admission and fee pages on the official website are the current
+        # source of truth. Older diary content can contain previous-year fees.
+        if admission_query:
+            if "lksec.org/admission-criteria" in source:
+                scores[i] += 0.45
+            if "school_diary.pdf" in source:
+                scores[i] -= 0.15
+
+        if fee_query:
+            if "lksec.org/fee-structure" in source:
+                scores[i] += 0.50
+            if "school_diary.pdf" in source:
+                scores[i] -= 0.20
+
+        # Prioritize official school contact information for contact-related queries.
+        if contact_query:
             if (
                 "contact numbers" in text
                 or "reception" in text
